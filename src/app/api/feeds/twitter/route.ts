@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const allTweets: any[] = [];
     
     for (const listId of listIds) {
-      const tweets = await fetchListTweets(listId.trim(), bearerToken);
+      const tweets = await fetchListTweetsOptimized(listId.trim(), bearerToken);
       allTweets.push(...tweets);
     }
 
@@ -58,18 +58,63 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchListTweets(listId: string, bearerToken: string): Promise<any[]> {
+import { PostTrackingService } from '@/lib/postTracker';
+
+async function fetchListTweetsOptimized(listId: string, bearerToken: string): Promise<any[]> {
+  try {
+    // First, fetch just 1 tweet to check if it's new
+    console.log(`🐦 Twitter API: Checking latest tweet from list ${listId} (quota-saving mode)`);
+    const latestTweet = await fetchTweets(listId, bearerToken, 1);
+    
+    if (latestTweet.length === 0) {
+      console.log(`🐦 Twitter API: No tweets found in list ${listId}`);
+      return [];
+    }
+
+    // Check if the latest tweet is new using a simple file read
+    const fs = require('fs');
+    const path = require('path');
+    const trackerFile = path.join(process.cwd(), '.post-tracker.json');
+    
+    let seenTwitterIds: string[] = [];
+    try {
+      if (fs.existsSync(trackerFile)) {
+        const trackerData = JSON.parse(fs.readFileSync(trackerFile, 'utf-8'));
+        seenTwitterIds = trackerData.lastSeen?.twitter || [];
+      }
+    } catch (e) {
+      console.log('🐦 Could not read tracker file, assuming all tweets are new');
+    }
+
+    const latestTweetId = latestTweet[0].id.replace('twitter-', '');
+    const isLatestTweetNew = !seenTwitterIds.includes(latestTweetId);
+
+    if (!isLatestTweetNew) {
+      console.log(`🐦 Twitter API: Latest tweet from list ${listId} is already seen, skipping full fetch (saved 24 tweets worth of quota)`);
+      return [];
+    }
+
+    // If latest tweet is new, fetch full batch
+    console.log(`🐦 Twitter API: Latest tweet is new, fetching full batch from list ${listId}`);
+    return await fetchTweets(listId, bearerToken, 25);
+
+  } catch (error) {
+    console.error(`🐦 Error in optimized fetch for list ${listId}:`, error);
+    return [];
+  }
+}
+
+async function fetchTweets(listId: string, bearerToken: string, maxResults: number): Promise<any[]> {
   try {
     const url = `https://api.twitter.com/2/lists/${listId}/tweets`;
     const params = new URLSearchParams({
       'tweet.fields': 'created_at,author_id,public_metrics,attachments',
       'expansions': 'author_id',
       'user.fields': 'username,name',
-      'max_results': '25',
+      'max_results': maxResults.toString(),
     });
 
-    console.log(`🐦 Twitter API: Fetching from list ${listId}`);
-    console.log(`🐦 Twitter API URL: ${url}?${params}`);
+    console.log(`🐦 Twitter API: Fetching ${maxResults} tweets from list ${listId}`);
     
     const response = await fetch(`${url}?${params}`, {
       headers: {
@@ -88,7 +133,6 @@ async function fetchListTweets(listId: string, bearerToken: string): Promise<any
     }
 
     const data: TwitterResponse = await response.json();
-    console.log(`🐦 Twitter API Response data:`, data);
     
     if (!data.data) {
       console.log(`🐦 Twitter API: No data.data field in response`);

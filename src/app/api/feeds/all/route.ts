@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PostTrackingService } from '@/lib/postTracker';
 
 // Reddit interfaces
 interface RedditPost {
@@ -105,12 +106,32 @@ export async function GET(request: NextRequest) {
   
   console.log(`🌟 Total posts fetched: ${allPosts.length}`);
   
+  // Filter for new posts only
+  const { newPosts, hasNewContent, sourcesWithNew } = PostTrackingService.filterNewPosts(allPosts);
+  
+  // Mark new posts as seen immediately after filtering
+  if (newPosts.length > 0) {
+    PostTrackingService.markPostsAsSeen(newPosts);
+  }
+  
+  // If no new content, return recent posts (last 20) for "caught up" view
+  let postsToReturn = newPosts;
+  if (!hasNewContent) {
+    postsToReturn = allPosts.slice(0, 20); // Show last 20 posts when caught up
+    console.log(`🔄 No new content found, showing last ${postsToReturn.length} posts for "caught up" view`);
+  }
+
   return NextResponse.json({ 
-    posts: allPosts,
+    posts: postsToReturn,
+    hasNewContent,
+    sourcesWithNew,
+    totalFetched: allPosts.length,
+    totalNew: newPosts.length,
+    showingRecentPosts: !hasNewContent && postsToReturn.length > 0,
     sources: {
-      hackerNews: allPosts.filter(p => p.source === 'hackernews').length,
-      reddit: allPosts.filter(p => p.source === 'reddit').length,
-      twitter: allPosts.filter(p => p.source === 'twitter').length
+      hackerNews: postsToReturn.filter(p => p.source === 'hackernews').length,
+      reddit: postsToReturn.filter(p => p.source === 'reddit').length,
+      twitter: postsToReturn.filter(p => p.source === 'twitter').length
     }
   });
 }

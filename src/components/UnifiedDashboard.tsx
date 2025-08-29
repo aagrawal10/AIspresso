@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { PostCard } from './PostCard';
-import { FeedSelector } from './FeedSelector';
 import { Post } from '@/types';
+import { RefreshCw } from 'lucide-react';
 
 interface FeedStats {
   hackerNews: number;
@@ -15,8 +15,10 @@ export function UnifiedDashboard() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFeeds, setSelectedFeeds] = useState<string[]>(['hackernews', 'reddit', 'twitter']);
   const [feedStats, setFeedStats] = useState<FeedStats>({ hackerNews: 0, reddit: 0, twitter: 0 });
+  const [caughtUp, setCaughtUp] = useState(false);
+  const [sourcesWithNew, setSourcesWithNew] = useState<string[]>([]);
+  const [showingRecentPosts, setShowingRecentPosts] = useState(false);
 
   const fetchAllPosts = async () => {
     try {
@@ -39,11 +41,17 @@ export function UnifiedDashboard() {
       
       setPosts(data.posts || []);
       setFeedStats(data.sources || { hackerNews: 0, reddit: 0, twitter: 0 });
-      console.log(`🌟 Successfully loaded ${data.posts?.length || 0} posts`);
+      setCaughtUp(!data.hasNewContent);
+      setSourcesWithNew(data.sourcesWithNew || []);
+      setShowingRecentPosts(data.showingRecentPosts || false);
+      
+      console.log(`🌟 Successfully loaded ${data.totalNew || 0} new posts (${data.totalFetched || 0} total fetched)`);
+      console.log(`🌟 Sources with new content: ${data.sourcesWithNew?.join(', ') || 'none'}`);
       
     } catch (error) {
       console.error('🌟 Error fetching posts:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch posts');
+      setCaughtUp(false);
     } finally {
       setLoading(false);
     }
@@ -53,17 +61,34 @@ export function UnifiedDashboard() {
     fetchAllPosts();
   }, []);
 
-  const filteredPosts = posts.filter(post => 
-    selectedFeeds.includes(post.source)
-  );
+  const getSourceIcon = (source: string) => {
+    switch (source) {
+      case 'hackernews': return '🟠';
+      case 'reddit': return '🔴';  
+      case 'twitter': return '🐦';
+      default: return '📰';
+    }
+  };
+
+  const getSourceName = (source: string) => {
+    switch (source) {
+      case 'hackernews': return 'Hacker News';
+      case 'reddit': return 'Reddit';
+      case 'twitter': return 'Twitter';
+      default: return source;
+    }
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">AIspresso Dashboard</h1>
           <div className="flex items-center justify-center h-64">
-            <div className="text-lg text-gray-600">Loading feeds...</div>
+            <div className="flex items-center gap-3">
+              <RefreshCw className="animate-spin" size={20} />
+              <div className="text-lg text-gray-600">Loading feeds...</div>
+            </div>
           </div>
         </div>
       </div>
@@ -73,16 +98,52 @@ export function UnifiedDashboard() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">AIspresso Dashboard</h1>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="text-red-800 font-medium">Error loading feeds</div>
-            <div className="text-red-600 text-sm mt-1">{error}</div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="text-red-800 font-medium mb-2">Error loading feeds</div>
+            <div className="text-red-600 text-sm mb-4">{error}</div>
             <button 
               onClick={fetchAllPosts}
-              className="mt-3 px-4 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200 text-sm"
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200 text-sm disabled:opacity-50"
             >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
               Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (caughtUp && posts.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">AIspresso Dashboard</h1>
+            <button
+              onClick={fetchAllPosts}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+          
+          <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
+            <div className="text-6xl mb-4">✅</div>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">You're all caught up!</h2>
+            <p className="text-gray-600 mb-6">No new posts from Hacker News, Reddit, or Twitter.</p>
+            <button
+              onClick={fetchAllPosts}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              Check for new posts
             </button>
           </div>
         </div>
@@ -92,44 +153,41 @@ export function UnifiedDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">AIspresso Dashboard</h1>
             <div className="text-sm text-gray-600 mt-2">
-              Showing {filteredPosts.length} of {posts.length} posts
-              {feedStats.hackerNews > 0 && ` • ${feedStats.hackerNews} HN`}
-              {feedStats.reddit > 0 && ` • ${feedStats.reddit} Reddit`}
-              {feedStats.twitter > 0 && ` • ${feedStats.twitter} Twitter`}
+              {showingRecentPosts ? (
+                <>
+                  <div className="text-green-600 font-medium mb-1">✅ You're all caught up!</div>
+                  <div>Showing {posts.length} recent posts</div>
+                </>
+              ) : (
+                <>
+                  {posts.length} new posts
+                  {sourcesWithNew.length > 0 && (
+                    <span className="ml-2">
+                      from {sourcesWithNew.map(source => getSourceIcon(source) + ' ' + getSourceName(source)).join(', ')}
+                    </span>
+                  )}
+                </>
+              )}
             </div>
           </div>
           <button
             onClick={fetchAllPosts}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
-        <FeedSelector 
-          selectedFeeds={selectedFeeds}
-          onFeedToggle={(feed) => {
-            setSelectedFeeds(prev => 
-              prev.includes(feed) 
-                ? prev.filter(f => f !== feed)
-                : [...prev, feed]
-            );
-          }}
-        />
-
-        {filteredPosts.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-500">No posts found</div>
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredPosts.map((post) => (
+        {posts.length > 0 && (
+          <div className="space-y-4">
+            {posts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}
           </div>
