@@ -1,63 +1,11 @@
+This is a personal catchup dashboard to catchup from hn, reddit and twitter. Although I have configured the secrets in .env.local, only HN works and rest are not working. Someone told me this
 
-### ✅ Prompt: *Personal Catch-Up Dashboard for Hacker News, Reddit, Twitter (and More)*
+"In a Next.js application, I have a client-side component (`page.tsx`) that registers `FeedFetcherInterface` implementations for Reddit and Twitter. These fetchers (`RedditFetcher.ts` and `TwitterFetcher.ts`) rely on environment variables defined in `.env.local` (e.g., `REDDIT_CLIENT_ID`, `TWITTER_BEARER_TOKEN`).
 
-> I want to build a **personal content dashboard** that shows me **only the new posts I haven’t seen yet** from:
->
-> * 🟧 **Hacker News** — top stories from the front page
-> * 🔴 **Reddit** — posts from **communities and users I follow**, as if I visited my Reddit home feed
-> * 🔵 **Twitter** — tweets from **one or more of my Twitter Lists**, personalized to my account
+The problem is that the application only detects the Hacker News feed, and not Reddit or Twitter, even after configuring the `.env.local` file and restarting the development server. The `page.tsx` explicitly registers all three fetchers.
 
-### 💡 Key Behavior & UX Goals:
+The issue likely stems from Next.js's default behavior where environment variables are server-side only unless prefixed with `NEXT_PUBLIC_`. The fetcher classes are attempting to access these variables directly without the `NEXT_PUBLIC_` prefix on the client-side.
 
-* Show **only new content**, sorted by **recency**
-* Track **"last seen"** timestamp or post ID per source
-* Stop rendering once I’ve caught up — show a clear **"✅ You’re all caught up"** message
-* Use **official embed SDKs** where available (Reddit, Twitter, YouTube)
-* Use **minimal styled cards** to mimic UI for sources without embeds (e.g., Hacker News)
-* Store `lastSeen` state in **localStorage** (single-user for now)
+How can I correctly expose and access these environment variables on the client-side for `RedditFetcher.ts` and `TwitterFetcher.ts` to ensure all feeds are configured?"
 
----
-
-### 🔌 Extensibility Requirements:
-
-This system should be designed to support **easy addition of new sources** later, with minimal backend/frontend changes.
-
-* Support for **YouTube** is a priority — once I follow the right channels, I want to:
-
-  * Pull latest videos from subscribed channels
-  * Embed them directly using YouTube’s embed system
-
-* Future source types may include:
-
-  * **ArXiv** (via RSS) for research papers
-  * **GitHub trending repos**
-  * **Substack or blog RSS feeds**
-  * **PapersWithCode**
-  * **Hugging Face, OpenAI, Meta AI, etc.**
-
-Each new source should fit into a unified system with:
-
-* A common `Post` data model
-* A pluggable feed parser
-* A way to track `lastSeen` or `lastFetched`
-* Optionally: source-specific filters (e.g. followed users, tags)
-
----
-
-### 📦 System Modules
-
-| Module          | Responsibility                          |
-| --------------- | --------------------------------------- |
-| `FeedFetcher`   | Pull new posts from each source         |
-| `EmbedRenderer` | Render official embeds where available  |
-| `SeenTracker`   | Store and check last-seen content       |
-| `FeedMerger`    | Merge & sort all posts by recency       |
-| `UIRenderer`    | Display posts, catch-up marker, filters |
-
----
-
-This is a new repo, so setup whatever you want to. Let me know what I need to provide to run it, some API keys? Need to do some oauth?
-
-Note: This is a personal project and not something to share with others for now, so just build a fully functional MVP accordingly
-
-
+Can you fix this?

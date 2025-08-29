@@ -37,29 +37,27 @@ export class TwitterFetcher implements FeedFetcherInterface {
   }
 
   async fetchPosts(config: FeedConfig): Promise<Post[]> {
-    const bearerToken = process.env.TWITTER_BEARER_TOKEN;
-    if (!bearerToken) {
-      console.error('Missing Twitter Bearer Token');
-      return [];
-    }
-
     try {
-      const listIds = process.env.TWITTER_LIST_IDS?.split(',') || [];
-      if (listIds.length === 0) {
-        console.warn('No Twitter lists configured');
+      console.log('🐦 TwitterFetcher: Making request to /api/feeds/twitter');
+      const response = await fetch('/api/feeds/twitter?t=' + Date.now());
+      
+      if (!response.ok) {
+        console.error('🐦 TwitterFetcher: API route error:', response.status, response.statusText);
         return [];
       }
-
-      const allTweets: Post[] = [];
       
-      for (const listId of listIds) {
-        const tweets = await this.fetchListTweets(listId.trim(), bearerToken);
-        allTweets.push(...tweets);
+      const data = await response.json();
+      console.log('🐦 TwitterFetcher: Received response:', data);
+      
+      if (data.error) {
+        console.error('🐦 TwitterFetcher: API error:', data.error);
+        return [];
       }
-
-      return allTweets;
+      
+      console.log(`🐦 TwitterFetcher: Successfully fetched ${data.posts?.length || 0} posts`);
+      return data.posts || [];
     } catch (error) {
-      console.error('Error fetching Twitter posts:', error);
+      console.error('🐦 TwitterFetcher: Error calling API route:', error);
       return [];
     }
   }
@@ -74,6 +72,9 @@ export class TwitterFetcher implements FeedFetcherInterface {
         'max_results': '25',
       });
 
+      console.log(`🐦 Twitter API: Fetching from list ${listId}`);
+      console.log(`🐦 Twitter API URL: ${url}?${params}`);
+      
       const response = await fetch(`${url}?${params}`, {
         headers: {
           'Authorization': `Bearer ${bearerToken}`,
@@ -81,14 +82,20 @@ export class TwitterFetcher implements FeedFetcherInterface {
         },
       });
 
+      console.log(`🐦 Twitter API Response: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
-        console.error(`Twitter API error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`🐦 Twitter API error: ${response.status} ${response.statusText}`);
+        console.error(`🐦 Twitter API error details:`, errorText);
         return [];
       }
 
       const data: TwitterResponse = await response.json();
+      console.log(`🐦 Twitter API Response data:`, data);
       
       if (!data.data) {
+        console.log(`🐦 Twitter API: No data.data field in response`);
         return [];
       }
 
@@ -96,9 +103,11 @@ export class TwitterFetcher implements FeedFetcherInterface {
         (data.includes?.users || []).map(user => [user.id, user])
       );
 
-      return data.data.map(tweet => TwitterFetcher.convertToPost(tweet, users));
+      const posts = data.data.map(tweet => TwitterFetcher.convertToPost(tweet, users));
+      console.log(`🐦 Twitter API: Successfully converted ${posts.length} tweets from list ${listId}`);
+      return posts;
     } catch (error) {
-      console.error(`Error fetching tweets from list ${listId}:`, error);
+      console.error(`🐦 Error fetching tweets from list ${listId}:`, error);
       return [];
     }
   }
